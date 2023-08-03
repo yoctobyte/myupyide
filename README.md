@@ -29,11 +29,13 @@ I used visual studio code for this project, but i did not include visual studio'
 
 ## Background
 This project was born out of necessity. While working on an Arduino BLE, I decided to transition to MicroPython. However, the available tools presented challenges. The Arduino-provided IDE for MicroPython, 'Arduino Lab', was not functioning as expected. I also tried OpenMV's editor, the officially supported one by Arduino, but faced issues there too.
+
 In response, I created this IDE tailored for MicroPython. The primary goals were to keep files locally on the PC, ensure easy synchronization with the microcontroller, and provide access to the REPL. The serial port needed to be shared between the REPL terminal and various IO functions. With AI's assistance, I developed an editor that allows opening multiple Python files, synchronizing them to the microcontroller, and testing functionalities within the terminal. This streamlined the development process, reducing the time between code changes and testing.
+
 Having used this editor for several months, I recognized its quirks but also its value. When I transitioned my hardware to an ESP32, the editor remained consistent, requiring no changes. I've decided to release it in its current state, believing it could be beneficial to others. This background serves as a testament to the project's journey and its adaptability.
 
 ## Disclaimer
 This project was crafted with the aid of AI to hasten development.
 
 ## License
-GPL
+GPL for the editor, MIT for the micropython's pyboard derived library (mypyboard), where i hacked in some small changes.
