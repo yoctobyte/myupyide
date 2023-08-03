@@ -5,8 +5,15 @@ An IDE to develop micropython on a microcontroller, with built in terminal and f
 This version is anything but finished. It is a very rough gem. It is functional. It has dozens of quircks.
 I figured i might as well track changes and bring it into the public, since, well, i am using it for a couple of month already for my uC project.
 
+## Screenshot
+![Screenshot 1](screenshots/screenshot1.png)
+
 ## Manual & instructions
-To-do. For now, please figure it out, it is not complicated. All you need is attach a microcontroller that has micropython flashed to it to your PC, launch the editor, and point to a working folder. The buttons and menu should be self-explanatory.
+To-do. 
+
+If you are familiar with micropython, you should be able to figure it out, it is not complicated. All you need is attach a microcontroller that has micropython flashed to it to your PC, launch the editor, and point to a working folder. The buttons and menu should be self-explanatory.
+
+If not, start by installing micropython on your uC, and make sure you can access it over the serial port. Once connected, the editor should work as expected.
 
 ## Install
 Install a recenty version of Python for your platform. (At the time of writing, this project was made and tested using Python 3.10)
