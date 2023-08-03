@@ -13,7 +13,7 @@ Install a recenty version of Python for your platform. (At the time of writing, 
 
 Install needed libraries. This project mostly uses the standard libraries but i may have overlooked some.
 ```
-pip install wx serial pygments pyserial pyboard
+pip install wx serial pygments pyserial
 ```
 
 Run the editor main file:
@@ -28,11 +28,13 @@ Pick a better name
 I used visual studio code for this project, but i did not include visual studio's files to the repository.
 
 ## Background
-This project was born out of necessity. While working on an Arduino BLE, I decided to transition to MicroPython. However, the available tools presented challenges. The Arduino-provided IDE for MicroPython, 'Arduino Lab', was not functioning as expected. I also tried OpenMV's editor, the officially supported one by Arduino, but faced issues there too.
+This project was born out of necessity. While working on an microcontroller project, I decided to transition my code to MicroPython. 
+I was not happy with the available IDE's (Arduino Lab, OpenMV). Hence, i hacked together an IDE that can share the serial connection to the uC board. 
 
-In response, I created this IDE tailored for MicroPython. The primary goals were to keep files locally on the PC, ensure easy synchronization with the microcontroller, and provide access to the REPL. The serial port needed to be shared between the REPL terminal and various IO functions. With AI's assistance, I developed an editor that allows opening multiple Python files, synchronizing them to the microcontroller, and testing functionalities within the terminal. This streamlined the development process, reducing the time between code changes and testing.
+The general idea is, to keep files locally on the PC, have easy synchronization of files to the microcontroller, and have access to the REPL.
+This results in a quick turn-around time between making code changes and testing them on the REPL.
 
-Having used this editor for several months, I recognized its quirks but also its value. When I transitioned my hardware to an ESP32, the editor remained consistent, requiring no changes. I've decided to release it in its current state, believing it could be beneficial to others. This background serves as a testament to the project's journey and its adaptability.
+I'm using it intensively for some months now, figured i might as well share the code. If it's useful to me, maybe it is for someone else.
 
 ## Disclaimer
 This project was crafted with the aid of AI to hasten development.
