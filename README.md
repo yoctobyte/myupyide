@@ -28,6 +28,18 @@ Run the editor main file:
 python mypyide.py
 ```
 
+## Known issues
+* It doesn't bother to ask for save changed files when you close the application
+* Fast serial input from the uC may crash the application, in particular when it is running in the background
+* Line numbering is only correct when the file was just loaded
+* Syntax highlighting only updates on load file or when actually editing, not on pasted code
+* The serial connection is not automatically reconnected when the device was unplugged
+* Not all remote file commands work (properly). The commander UI in general is spartan.
+* There is a purposeful hard-coded delay when syncing data. This to avoid errors, when the serial speed exceeds the capabilities of parsing data and buffering the serial input. It is there because syncing larger files was prone to errors. It slows down syncing speed to several seconds per 10kB.
+* Overwriting a save file asks for confirmation twice
+* And many more. Please fix.
+
+
 ## To-do
 Pick a better name
 
