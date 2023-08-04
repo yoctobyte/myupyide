@@ -16,9 +16,9 @@ If you are familiar with micropython, you should be able to figure it out, it is
 If not, start by installing micropython on your uC, and make sure you can access it over the serial port. Once connected, the editor should work as expected.
 
 ## Install
-Install a recenty version of Python for your platform. (At the time of writing, this project was made and tested using Python 3.10)
+Install a recent version of Python for your platform. (At the time of writing, this project was made and tested using Python 3.10 on Windows 10)
 
-Install needed libraries. This project mostly uses the standard libraries but i may have overlooked some.
+Install libraries.
 ```
 pip install wx serial pygments pyserial
 ```
