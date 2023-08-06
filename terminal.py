@@ -86,7 +86,7 @@ class TerminalWindow:
 
 
     def _handle_key_event(self, event):
-        print (f"Key event {event.char} {event.state}")
+        #print (f"Key event {event.char} {event.state}")
 
         if event.char:
             self._send_data(event.char.encode())
