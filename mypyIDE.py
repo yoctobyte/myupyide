@@ -108,6 +108,11 @@ class MainApplication:
         self.run_button = ttk.Button(self.top_bar, text='RUN', command=self.on_run)
         self.run_button.pack(side='left')
 
+        # Upload file button
+        self.upload_file_button = ttk.Button(self.top_bar, text='Upload File', command=self.upload_file)
+        self.upload_file_button.pack(side='left')
+
+
 
         # Autosync checkbox
         self.autosync_var = tk.IntVar()
@@ -240,6 +245,14 @@ class MainApplication:
         def update_status_text (text):
             self.status_bar.config (text=text)
         self.status_bar.after(100, lambda: update_status_text(status))
+
+    def upload_file(self):
+        # Open a file dialog to select a file
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            # Sync/upload the selected file
+            self.sync.sync_file(file_path)
+
 
 
 
