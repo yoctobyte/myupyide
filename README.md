@@ -20,7 +20,7 @@ Install a recent version of Python for your platform. (At the time of writing, t
 
 Install libraries.
 ```
-pip install wx serial pygments pyserial
+pip install wx serial pygments pyserial pyte
 ```
 
 Run the editor main file:
