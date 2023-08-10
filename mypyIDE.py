@@ -22,7 +22,7 @@ class MainApplication:
         # Initialize other modules
         #self.shared_serial = SerialPortManager()
         self.terminal = None #terminal.TerminalWindow()
-        self.sync = sync.SyncModule()
+        self.sync = sync.SyncModule(self.handle_progress)
         self.settings = settings.Settings()
         self.editor = None
         self.serial=share_serial.SerialPortManager()
@@ -133,6 +133,11 @@ class MainApplication:
         # Bind the dropdown clicked event to the combobox
         self.port_dropdown.bind("<Button-1>", self.update_ports)
 
+        # Progress bar
+        self.progress_bar = ttk.Progressbar(self.top_bar, orient="horizontal", mode="determinate")
+        self.progress_bar.pack(side='bottom', fill='x')
+
+
     def bind_editor_events_actionbar(self):
         self.save_button.configure(command=self.editor.save_file)
         self.save_all_button.configure(command=self.editor.save_all_files)
@@ -181,6 +186,11 @@ class MainApplication:
         # Set the width of each child widget to half the width of the PanedWindow
         self.notebook_frame.config(width=width//2)
         self.terminal_frame.config(width=width//2)
+
+    def handle_progress(self, progress, status):
+        self.progress_bar["value"] = progress
+        self.status_bar.config(text=f"{status} ({progress}%)")
+        self.root.update_idletasks()
 
 
     def update_ports(self, event):

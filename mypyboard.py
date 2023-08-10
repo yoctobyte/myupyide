@@ -237,10 +237,13 @@ class ProcessPtyToTerminal:
 
 class Pyboard:
     def __init__(
-        self, device, serialport=None, baudrate=115200, user="micro", password="python", wait=0, exclusive=True
+        self, device, serialport=None, _progress_callback=None, baudrate=115200, user="micro", password="python", wait=0, exclusive=True
     ):
         self.in_raw_repl = False
         self.use_raw_paste = True
+        self.progress_callback=_progress_callback
+
+        #i'm leaving the code for alternative connection methods in place. might be useful some day.
         if device.startswith("exec:"):
             self.serialconnection = ProcessToSerial(device[len("exec:") :])
         elif serialport is not None:
@@ -292,6 +295,14 @@ class Pyboard:
                 raise PyboardError("failed to access " + device)
             if delayed:
                 print("")
+
+    def do_progress(self, progress=0.0, status=None):
+        #print (f"Progress: {progress}% {status}")
+        if self.progress_callback:
+            try:
+                self.progress_callback(progress, status)
+            except:
+                self.progress_callback=None
 
     def close(self):
         pass
@@ -431,10 +442,12 @@ class Pyboard:
         if not self.in_raw_repl:
             raise PyboardError("could not enter raw repl")
 
+        #self.do_progress(1, "Entered RAW REPL")
+
         #just assume it works. it'll raise an exception anyways if it doesn't. bit uglyducky code this at times.
 
 
-        #ok, this is silly. now, if you want to do anything sane, should clear the buffer. 
+        #ok, this seems silly. if you want to do anything sane, should clear the buffer. not sure, some black magic i have to trace:
         if self.serialconnection.inWaiting()>0:
             self.serialconnection.read(self.serialconnection.inWaiting())
 
@@ -457,9 +470,12 @@ class Pyboard:
             # Don't try to use raw-paste mode again for this connection.
             self.use_raw_paste = False
 
+        self.do_progress(2, "Transfer starting")
+
         # Write command using standard raw REPL, 256 bytes every 10ms.
         for i in range(0, len(command_bytes), 256):
             self.serialconnection.write(command_bytes[i : min(i + 256, len(command_bytes))])
+            self.do_progress((100.0*i*256/len(command_bytes)), f"{i*256} bytes")
             time.sleep(0.01)
         self.serialconnection.write(b"\x04")
 
@@ -615,9 +631,9 @@ class Pyboard:
                     progress_callback(written, src_size)
         self.exec_("f.close()")
 
-    def fs_put(self, src, dest, chunk_size=64, progress_callback=None):
+    def fs_put(self, src, dest, chunk_size=64):
         print (f"Putting file {src} as {dest}")
-        if progress_callback:
+        if True or self.progress_callback:
             src_size = os.path.getsize(src)
             written = 0
         self.exec_("f=open('%s','wb')\nw=f.write" % dest)
@@ -633,10 +649,10 @@ class Pyboard:
                         self.exec_("w(" + repr(data) + ")")
                     except:
                         print ("Failed to write data {data}")
-                if progress_callback:
+                if True or self.progress_callback:
                     written += len(data)
-                    progress_callback(written, src_size)
-                    print ("Progress:"+str(written))
+                    self.do_progress(100.0*written/src_size, f"{written}/{src_size}")
+                    #print ("Progress:"+str(written))
                 time.sleep (0.05)
         self.exec_("f.close()")
 

@@ -5,7 +5,8 @@ import os
 
 
 class SyncModule: 
-    def __init__ (self):
+    def __init__ (self, _progress_callback=None):
+        self.progress_callback=_progress_callback
         self.sharedserial = share_serial.SerialPortManager()
         #we have no need to open it. we will see if it's opened when we are called.     
         SyncModule.workdir=""  
@@ -15,7 +16,7 @@ class SyncModule:
             self.mypy=None
             return False
 
-        self.mypy=mypyboard.Pyboard("serial", self.sharedserial._serial_port)
+        self.mypy=mypyboard.Pyboard("serial", self.sharedserial._serial_port, self.progress_callback)
         return True
 
     def ffn(self, fn): #full filename
@@ -24,13 +25,22 @@ class SyncModule:
         else:
             return f"{self.workdir}/{fn}"
 
+    def do_progress(self, progress=0.0, status=None):
+        print(f"Progress: {progress}% {status}")
+        if self.progress_callback:
+            try:
+                self.progress_callback(progress, status)
+            except:
+                self.progress_callback = None
+
+
     def sync_file(self, filename):
         if not self.getmypy():
             raise Exception ("Cannot access serial port. It is not open.")
 
         #workaround, micropython not happy overwriting files after a while:
         #self.sync_action('rm', os.path.basename(filename)) #my bad, storage was full.
-
+        self.do_progress(1, f"Syncing {filename}")
         print ("Syncing file "+filename)
         self.sharedserial.send_lock()
         try:
@@ -39,6 +49,8 @@ class SyncModule:
             self.mypy.exit_raw_repl()
         finally:
             self.sharedserial.send_unlock()
+
+        self.do_progress(100, f"Syncing {filename} complete")
 
         pass
 
