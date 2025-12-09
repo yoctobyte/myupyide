@@ -55,6 +55,8 @@ This results in a quick turn-around time between making code changes and testing
 
 I'm using it intensively for some months now, figured i might as well share the code. If it's useful to me, maybe it is for someone else.
 
+2025 - In need of the project again, working on it. 
+
 ## Disclaimer
 This project was crafted with the aid of AI to hasten development.
 
