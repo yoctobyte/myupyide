@@ -16,4 +16,6 @@ dependencies = [
     "pyte",
 ]
 
-# No [project.scripts] yet — we'll add a CLI entry point later.
+[project.scripts]
+myupyide = "myupyide.mypyide:run"
+
