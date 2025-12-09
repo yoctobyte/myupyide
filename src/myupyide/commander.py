@@ -2,8 +2,8 @@
 import tkinter as tk
 from tkinter import messagebox, filedialog
 from turtle import delay
-import share_serial
-import sync
+from . import share_serial
+from . import sync
 
 class CustomTooltip:
     def __init__(self, widget, text, delay):

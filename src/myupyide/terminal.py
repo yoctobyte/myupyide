@@ -1,5 +1,5 @@
 import tkinter as tk
-import share_serial
+from . import share_serial
 import re
 import pyte
 

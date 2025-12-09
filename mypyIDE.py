@@ -12,8 +12,6 @@ from . import commander
 
 
 
-
-
 class MainApplication:
     def __init__(self):
         self.root = tk.Tk()

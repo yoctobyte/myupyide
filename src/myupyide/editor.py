@@ -6,9 +6,9 @@ import tkinter.font as font
 import os
 import shutil
 import datetime
-import settings
-import highlight
-from multirownotebook import MultiRowNotebook
+from . import settings
+from . import highlight
+from .multirownotebook import MultiRowNotebook
 
 
 
