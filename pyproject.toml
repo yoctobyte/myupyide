@@ -1,6 +1,7 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
+
 
 [project]
 name = "myupyide"
@@ -9,7 +10,7 @@ description = "A minimal MicroPython IDE with local files and serial sync."
 authors = [{ name = "Rene Tegel" }]
 requires-python = ">=3.10"
 dependencies = [
-    "wxPython",
+    #"wxPython",
     "pyserial",
     "pygments",
     "pyte",
