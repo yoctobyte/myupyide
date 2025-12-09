@@ -1,0 +1,5 @@
+wxPython
+pyserial
+pygments
+pyte
+
