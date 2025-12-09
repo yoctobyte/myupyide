@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "myupyide"
+version = "0.1.0"
+description = "A minimal MicroPython IDE with local files and serial sync."
+authors = [{ name = "Rene Tegel" }]
+requires-python = ">=3.10"
+dependencies = [
+    "wxPython",
+    "pyserial",
+    "pygments",
+    "pyte",
+]
+
+# No [project.scripts] yet — we'll add a CLI entry point later.
