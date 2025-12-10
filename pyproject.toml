@@ -19,3 +19,6 @@ dependencies = [
 [project.scripts]
 myupyide = "myupyide.mypyide:run"
 
+[tool.setuptools.package-data]
+myupyide = ["assets/*.png", "assets/*.ico"]
+

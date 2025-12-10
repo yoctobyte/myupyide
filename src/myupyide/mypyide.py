@@ -1,8 +1,12 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
+from tkinter import PhotoImage
+
 import os
+import sys
 import serial.tools.list_ports
+
 from . import settings
 from . import editor
 from . import terminal
@@ -11,14 +15,33 @@ from . import sync
 from . import commander
 
 
+assets = os.path.join(os.path.dirname(__file__), "assets")
 
+png_icon = os.path.join(assets, "app_icon.png")
+ico_icon = os.path.join(assets, "app_icon.ico")
 
 
 class MainApplication:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title('MyPyIDE')
-        self.root.geometry('1024x800')
+        self.root.title('My uPy IDE')
+        self.root.geometry('1280x800')
+        
+        # PNG for Linux/macOS
+        try:
+            self.root.iconphoto(True, PhotoImage(file=png_icon))
+        except Exception as e:
+            print("Failed to load PNG icon:", e)
+
+        # ICO for Windows
+        if sys.platform.startswith("win"):
+            try:
+                self.root.iconbitmap(ico_icon)
+            except Exception as e:
+                print("Failed to load ICO icon:", e)
+        
+        
+        
         # Initialize other modules
         #self.shared_serial = SerialPortManager()
         self.terminal = None #terminal.TerminalWindow()
