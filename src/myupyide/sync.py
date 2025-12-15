@@ -1,4 +1,4 @@
-from lib2to3.refactor import get_all_fix_names
+#from lib2to3.refactor import get_all_fix_names
 from . import share_serial
 from . import mypyboard
 import os
