@@ -4,20 +4,20 @@ from . import mypyboard
 import os
 
 
-class SyncModule: 
+class SyncModule:
     def __init__ (self, _progress_callback=None):
         self.progress_callback=_progress_callback
         self.sharedserial = share_serial.SerialPortManager()
-        #we have no need to open it. we will see if it's opened when we are called.     
-        SyncModule.workdir=""  
-        
-    def getmypy(self):
-        if self.sharedserial._serial_port is None:
-            self.mypy=None
-            return False
+        #we have no need to open it. we will see if it's opened when we are called.
+        SyncModule.workdir=""
 
-        self.mypy=mypyboard.Pyboard("serial", self.sharedserial._serial_port, self.progress_callback)
+    def getmypy(self):
+        # Noli attingere _serial_port directe; utere manager.
+        if not self.sharedserial.is_open():
+            self.mypy = None
+            return False
         return True
+
 
     def ffn(self, fn): #full filename
         if SyncModule.workdir=="":
@@ -36,32 +36,30 @@ class SyncModule:
 
     def sync_file(self, filename):
         if not self.getmypy():
-            raise Exception ("Cannot access serial port. It is not open.")
+            raise Exception("Cannot access serial port. It is not open.")
 
-        #workaround, micropython not happy overwriting files after a while:
-        #self.sync_action('rm', os.path.basename(filename)) #my bad, storage was full.
         self.do_progress(1, f"Syncing {filename}")
-        print ("Syncing file "+filename)
-        self.sharedserial.send_lock()
-        try:
+        print("Syncing file " + filename)
+
+        with self.sharedserial.exclusive_port() as port:
+            self.mypy = mypyboard.Pyboard("serial", port, self.progress_callback)
             self.mypy.enter_raw_repl()
             self.mypy.fs_put(filename, self.ffn(os.path.basename(filename)))
             self.mypy.exit_raw_repl()
-        finally:
-            self.sharedserial.send_unlock()
 
         self.do_progress(100, f"Syncing {filename} complete")
 
-        pass
 
     def sync_action(self, action, src="", dest="", filenames=[]):
         result = None
         if not self.getmypy():
-            raise Exception ("Cannot access serial port. It is not open.")
+            raise Exception("Cannot access serial port. It is not open.")
 
-        print (f"Performing action {action} on file {src}")
-        self.sharedserial.send_lock()
-        try:
+        print(f"Performing action {action} on file {src}")
+
+        with self.sharedserial.exclusive_port() as port:
+            self.mypy = mypyboard.Pyboard("serial", port, self.progress_callback)
+
             self.mypy.enter_raw_repl()
             if action == 'pwd':
                 result = self.mypy.fs_pwd()
@@ -83,29 +81,23 @@ class SyncModule:
                 result = self.mypy.fs_rm(src)
             if action == 'stat':
                 result = self.mypy.fs_stat(self.ffn(src))
-            #not overly sure what the difference with 'cat' ought to be. will check.
             if action == 'view':
                 result = self.mypy.fs_readfile(self.ffn(src))
-            #similarly, writefile will accept a buffer. for now, we stick to our save-and-transfer but maybe for copy and paste?
             if action == 'cp':
                 result = self.mypy.fs_cp(self.ffn(src), self.ffn(dest))
             if action == 'touch':
                 result = self.mypy.fs_touch(self.ffn(src))
             if action == 'mv':
-                #ok, here is the issue. rename/move not supported yet. instead we will copy the item.
                 result = self.mypy.fs_cp(self.ffn(src), self.ffn(dest))
-                #to fix this, we could delete after copy. but not after we verified it exists and is same size, or so.
             if action == 'exec':
                 buffer = bytearray()
+
                 def dataconsumer(data):
                     buffer.extend(data.replace(b"\x04", b""))
 
-                result = self.mypy.exec_(src, dataconsumer)
-                #result=self.mypy.follow(10)
+                _ = self.mypy.exec_(src, dataconsumer)
                 result = buffer.decode()
 
             self.mypy.exit_raw_repl()
-        finally:
-            self.sharedserial.send_unlock()
 
         return result

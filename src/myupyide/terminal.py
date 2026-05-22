@@ -178,14 +178,46 @@ class TerminalWindow:
         ):
             return "break"
 
-        # Let Tk handle Ctrl-based shortcuts (e.g., Ctrl+C, Ctrl+V),
-        # except: we override paste via <<Paste>> / _handle_paste.
+        # Ctrl combos: keep normal UX when there is a selection (copy/select-all),
+        # but also support MicroPython REPL control codes when there isn't.
         ctrl_down = bool(event.state & 0x4)  # Control modifier mask in Tk
         if ctrl_down:
-            # Avoid sending control characters like ^C, ^V by default.
-            # If you *do* want them to go to the device, remove this block
-            # or special-case keys here.
-            return  # do NOT return "break" → let Tk generate <<Paste>>, etc.
+            ks = (event.keysym or "").lower()
+            has_sel = bool(self.text_widget.tag_ranges("sel"))
+
+            # Ctrl+V: let Tk generate <<Paste>> / <Control-v> which we already override
+            if ks == "v":
+                return  # NOT "break"
+
+            # Ctrl+A: typical terminal UX
+            if ks == "a":
+                self._select_all()
+                return "break"
+
+            # Ctrl+C: copy if selection, otherwise send ^C to device (Interrupt)
+            if ks == "c":
+                if has_sel:
+                    self._copy_selection()
+                else:
+                    self._send_data(b"\x03")  # ^C
+                return "break"
+
+            # MicroPython: Ctrl+D = soft reset
+            if ks == "d":
+                self._send_data(b"\x04")  # ^D
+                return "break"
+
+            # MicroPython raw REPL helpers (handy, optional but harmless)
+            if ks == "b":
+                self._send_data(b"\x02")  # ^B (exit raw REPL)
+                return "break"
+            if ks == "e":
+                self._send_data(b"\x05")  # ^E (paste mode, if supported)
+                return "break"
+
+            # Anything else: don't send control chars by default; let Tk handle it.
+            return  # NOT "break"
+
 
         # Arrow keys → ANSI escape sequences
         if event.keysym == "Up":
@@ -240,12 +272,8 @@ class TerminalWindow:
         return "break"
 
     def _send_data(self, data: bytes):
-        """Send data to the serial port."""
-        self.serial.send_lock()
-        try:
-            self.serial.send_data(data)
-        finally:
-            self.serial.send_unlock()
+        self.serial.send_data(data)
+
 
     # ─────────────────────────────────────────────────────────────
     #  PUBLIC API

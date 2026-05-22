@@ -1,200 +1,259 @@
 import threading
-from typing import Callable
-import serial
 import time
+from contextlib import contextmanager
+from typing import Callable, Optional
 
-#it is almost a static class. but since we can't do that, the variables are static. methods don't need to be (i think)
+import serial
+
+SERIAL_SPEED = 115200
+
+
+class _LockedPortProxy:
+    """
+    Portus proxy: omnia I/O sub mutex gerit.
+    Compatibilitas: praebet inWaiting() sicut pyserial vetus.
+    """
+    def __init__(self, sp: serial.Serial, lock: threading.RLock):
+        self._sp = sp
+        self._lock = lock
+
+    @property
+    def baudrate(self):
+        return self._sp.baudrate
+
+    @property
+    def in_waiting(self):
+        with self._lock:
+            return self._sp.in_waiting
+
+    # ── legacy pyserial API ────────────────────────────────
+    def inWaiting(self) -> int:
+        return int(self.in_waiting)
+
+    def flushInput(self) -> None:
+        self.reset_input_buffer()
+
+    def flushOutput(self) -> None:
+        self.reset_output_buffer()
+
+    # ── core methods used by mypyboard.py ──────────────────
+    def read(self, n: int = 1) -> bytes:
+        with self._lock:
+            return self._sp.read(n)
+
+    def write(self, data: bytes) -> int:
+        with self._lock:
+            return self._sp.write(data)
+
+    def flush(self) -> None:
+        with self._lock:
+            self._sp.flush()
+
+    def reset_input_buffer(self) -> None:
+        with self._lock:
+            self._sp.reset_input_buffer()
+
+    def reset_output_buffer(self) -> None:
+        with self._lock:
+            self._sp.reset_output_buffer()
+
+    def close(self) -> None:
+        #we never close. shared serial.
+        return
+
+
+
+
 class SerialPortManager:
-    """
-    Manages shared access to a serial port.
-    """
     _instances = []
-    _subscribers = []
-    _lock = None
-    _lock_type = None  # None, 'send', 'full'
-    _serial_port = None
+    _subscribers: list[Callable[[bytes], None]] = []
+    _status_cb: Optional[Callable[[str], None]] = None
+
+    _serial_port: Optional[serial.Serial] = None
     _running = False
-    _thread = None
-    callback = None
+    _thread: Optional[threading.Thread] = None
+
+    _io_lock = threading.RLock()
+
+    # Exclusivum: dum verum est, lector nihil legit.
+    _exclusive = False
 
     def __init__(self):
         SerialPortManager._instances.append(self)
-        if SerialPortManager._lock == None:
-            SerialPortManager._lock = threading.Lock()
-        
 
     def __del__(self):
-        SerialPortManager._instances.remove(self)
+        try:
+            SerialPortManager._instances.remove(self)
+        except Exception:
+            pass
         if len(SerialPortManager._instances) == 0:
-            close()
+            try:
+                SerialPortManager.close()
+            except Exception:
+                pass
 
+    @staticmethod
+    def set_status_callback(cb: Optional[Callable[[str], None]]):
+        SerialPortManager._status_cb = cb
+
+    @staticmethod
+    def _status(msg: str):
+        cb = SerialPortManager._status_cb
+        if cb is not None:
+            try:
+                cb(msg)
+            except Exception:
+                pass
+
+    @staticmethod
     def close():
-        if SerialPortManager._serial_port is not None:
+        with SerialPortManager._io_lock:
             SerialPortManager._running = False
-            if SerialPortManager._thread is not None:
-                try:
-                    SerialPortManager._thread.join()
-                except:
-                    time.sleep (1.0)
-                    pass
-            SerialPortManager._serial_port.close()
-            time.sleep(1.0)
+            SerialPortManager._exclusive = False
 
-    def open(self, port_name: str, baud_rate: int = 115200):
-        if SerialPortManager._serial_port is not None:
-            SerialPortManager._running = False
-            if SerialPortManager._thread is not None:
-                try:
-                    SerialPortManager._thread.join()
-                except:
-                    sleep (1.0)
-                    pass
-            SerialPortManager._serial_port.close()
-            SerialPortManager._thread = None
+        t = SerialPortManager._thread
+        if t is not None:
+            try:
+                t.join(timeout=1.0)
+            except Exception:
+                pass
+
+        with SerialPortManager._io_lock:
+            sp = SerialPortManager._serial_port
             SerialPortManager._serial_port = None
+            SerialPortManager._thread = None
 
-            time.sleep (1.0)
+        if sp is not None:
+            try:
+                sp.close()
+            except Exception:
+                pass
+            time.sleep(0.2)
+
+    def open(self, port_name: str, baud_rate: int = SERIAL_SPEED) -> bool:
+        SerialPortManager.close()
 
         try:
-            SerialPortManager._serial_port = serial.Serial(port_name, baud_rate)
-            #SerialPortManager._serial_port.open()
+            sp = serial.Serial(
+                port=port_name,
+                baudrate=baud_rate,
+                timeout=0.10,         # ne umquam infinitum sit
+                write_timeout=1.0,
+                xonxoff=False,
+                rtscts=False,
+                dsrdtr=False,
+            )
         except Exception as e:
-            print(f"Unable to open serial port {port_name}. Error: {e}")
-            SerialPortManager._serial_port = None
+            SerialPortManager._status(f"Unable to open serial port {port_name}: {e}")
             return False
 
-        SerialPortManager._running = True
-        SerialPortManager._thread = threading.Thread(target=SerialPortManager._read_from_port, daemon=True)
-        SerialPortManager._thread.start()
-        self._notify_subscribers(f"Serial port changed to {port_name}")
+        with SerialPortManager._io_lock:
+            SerialPortManager._serial_port = sp
+            SerialPortManager._running = True
+            SerialPortManager._exclusive = False
+            SerialPortManager._thread = threading.Thread(
+                target=SerialPortManager._read_from_port,
+                daemon=True,
+            )
+            SerialPortManager._thread.start()
+
+        SerialPortManager._status(f"Serial port changed to {port_name}")
         return True
 
-    def subscribe(self, listener: Callable[[str], None]):
+    def is_open(self) -> bool:
+        with SerialPortManager._io_lock:
+            return SerialPortManager._serial_port is not None
+
+    def subscribe(self, listener: Callable[[bytes], None]):
         SerialPortManager._subscribers.append(listener)
 
-    def unsubscribe(self, listener: Callable[[str], None]):
-        if listener in SerialPortManager._subscribers:
+    def unsubscribe(self, listener: Callable[[bytes], None]):
+        try:
             SerialPortManager._subscribers.remove(listener)
+        except ValueError:
+            pass
 
-    def send_data(self, data: bytes):
-        if SerialPortManager._serial_port is not None:
-            self.send_lock()
+    @staticmethod
+    def _notify_subscribers(data: bytes):
+        for subscriber in list(SerialPortManager._subscribers):
             try:
-                self._serial_port.write(data)
-            except:
-                if SerialPortManager.callback is not None:
-                    SerialPortManager.callback ("Error writing to serial port. It may be disconnected")
-                pass
-            self.send_unlock()
-
-    def send_lock(self):
-        with SerialPortManager._lock:
-            SerialPortManager._lock_type = 'send'
-
-    def send_unlock(self):
-        with SerialPortManager._lock:
-            SerialPortManager._lock_type = None
-
-    def full_lock(self):
-        with SerialPortManager._lock:
-            SerialPortManager._lock_type = 'full'
-            time.sleep(0.05)
-
-    def full_unlock(self):
-        with SerialPortManager._lock:
-            SerialPortManager._lock_type = None
-
-    def _notify_subscribers(self, message: str):
-        for subscriber in SerialPortManager._subscribers:
-            try:
-                subscriber(message)
-            finally:
+                subscriber(data)
+            except Exception:
                 pass
 
     @staticmethod
     def _read_from_port():
-        while SerialPortManager._running and SerialPortManager._serial_port is not None:
-            if SerialPortManager._lock_type is not None:
-                time.sleep(0.1)
+        while True:
+            with SerialPortManager._io_lock:
+                running = SerialPortManager._running
+                sp = SerialPortManager._serial_port
+                exclusive = SerialPortManager._exclusive
+
+            if not running or sp is None:
+                break
+
+            # Si exclusivum, lector quiescat.
+            if exclusive:
+                time.sleep(0.01)
                 continue
+
             try:
-                if SerialPortManager._serial_port.in_waiting > 0:
-                    while SerialPortManager._serial_port.in_waiting > 0:
-                        data = SerialPortManager._serial_port.read(SerialPortManager._serial_port.in_waiting)
-                        SerialPortManager._notify_subscribers(None, data)
-            except:
-                #seems our port went offline, next time better
-                time.sleep (0.5)
-            time.sleep(0.01)
+                n = sp.in_waiting
+                if n:
+                    data = sp.read(n)
+                else:
+                    data = b""
+            except Exception:
+                data = b""
 
-    def is_locked(self) -> bool:
-        with SerialPortManager._lock:
-            return SerialPortManager._lock_type is not None
+            if data:
+                SerialPortManager._notify_subscribers(data)
 
+            time.sleep(0.005)
 
-#tests
-import unittest
-from unittest.mock import Mock, patch
-from serial import Serial
+    def send_data(self, data: bytes, pace: bool = False) -> None:
+        """
+        Simplex scribere pro terminali. (pace optional)
+        """
+        if not data:
+            return
+        with SerialPortManager._io_lock:
+            sp = SerialPortManager._serial_port
+            if sp is None:
+                return
+            try:
+                sp.write(data)
+                sp.flush()
+            except Exception:
+                SerialPortManager._status("Error writing to serial port.")
+                return
 
-class TestSerialPortManager(unittest.TestCase):
+        if pace:
+            seconds_per_byte = (10.0 / float(sp.baudrate or SERIAL_SPEED)) * 1.5
+            time.sleep(len(data) * seconds_per_byte)
 
-    def setUp(self):
-        self.port='COM1'
-        self.serial=None
-        self.manager = SerialPortManager()
-        self.manager.open(self.port)
+    @contextmanager
+    def exclusive_port(self):
+        """
+        Sessio exclusiva: lector cessat, et portus per proxy cum mutex datur.
+        """
+        with SerialPortManager._io_lock:
+            sp = SerialPortManager._serial_port
+            if sp is None:
+                raise RuntimeError("Serial port is not open")
+            SerialPortManager._exclusive = True
+
+            # Bonus: purga buffers ut status vetus non confundat raw repl.
+            try:
+                sp.reset_input_buffer()
+                sp.reset_output_buffer()
+            except Exception:
+                pass
+
+            proxy = _LockedPortProxy(sp, SerialPortManager._io_lock)
+
         try:
-            self.serial = Serial(self.port, 9600, timeout=10)
-            #self.serial.open()
-            self.serial.close()
-            time.sleep (1.0)
-        except:
-            print (f"Failed to open serial port {self.port}, probably cannot complete test.")
-            pass
-
-
-
-
-    @patch('serial.Serial', autospec=True)
-    def test_open_serial_port(self, mock_serial):
-        mock_serial.return_value = self.serial
-        self.manager.open(self.port)
-        mock_serial.assert_called_once_with(self.port, 115200)
-        #self.assertEqual(self.manager._serial_port.port, self.port)
-
-    @patch('serial.Serial', autospec=True)
-    def test_send_data(self, mock_serial):
-        mock_serial.return_value = self.serial
-        self.manager.open(self.port)
-        data = b'Test data'
-        self.manager.send_data(data)
-        #self.serial.write.assert_called_once_with(data)
-
-    def test_subscribe(self):
-        mock_listener = Mock()
-        self.manager.subscribe(mock_listener)
-        self.assertIn(mock_listener, self.manager._subscribers)
-
-    def test_unsubscribe(self):
-        mock_listener = Mock()
-        self.manager.subscribe(mock_listener)
-        self.manager.unsubscribe(mock_listener)
-        self.assertNotIn(mock_listener, self.manager._subscribers)
-
-    def test_locking(self):
-        self.assertFalse(self.manager.is_locked())
-        self.manager.send_lock()
-        self.assertTrue(self.manager.is_locked())
-        self.manager.send_unlock()
-        self.assertFalse(self.manager.is_locked())
-        self.manager.full_lock()
-        self.assertTrue(self.manager.is_locked())
-        self.manager.full_unlock()
-        self.assertFalse(self.manager.is_locked())
-
-         
-
-if __name__ == '__main__':
-    unittest.main()
-    #unittest.manager.close() #background thread..
+            yield proxy
+        finally:
+            with SerialPortManager._io_lock:
+                SerialPortManager._exclusive = False

@@ -308,7 +308,42 @@ class Pyboard:
         pass
         self.serialconnection.close()
 
+
     def read_until(self, min_num_bytes, ending, timeout=10, data_consumer=None):
+        assert data_consumer is None or len(ending) == 1
+
+        data = self.serialconnection.read(min_num_bytes)
+        if data_consumer:
+            data_consumer(data)
+            data = b""
+
+        start = time.time()
+        while True:
+            if data.endswith(ending):
+                break
+
+            if data_consumer:
+                new_data = self.serialconnection.read(1)
+                if new_data:
+                    data_consumer(new_data)
+                    data = new_data
+            else:
+                # read as much as possible
+                n = self.serialconnection.inWaiting()
+                if n:
+                    data += self.serialconnection.read(n)
+
+            if timeout is not None and (time.time() - start) > timeout:
+                # DEBUG: show what we got
+                print("[pyboard] read_until TIMEOUT. got bytes:", repr(data[-200:]))
+                return data
+
+            time.sleep(0.01)
+
+        return data
+
+
+    def read_until_o(self, min_num_bytes, ending, timeout=10, data_consumer=None):
         # if data_consumer is used then data is not accumulated and the ending must be 1 byte long
         assert data_consumer is None or len(ending) == 1
 
@@ -339,6 +374,8 @@ class Pyboard:
 
     def enter_raw_repl(self, soft_reset=True):
         self.serialconnection.write(b"\r\x03\x03")  # ctrl-C twice: interrupt any running program
+        self.serialconnection.write(b"\r\x03\x03\x03")  # Ctrl-C x3
+        time.sleep(1.0)
 
         # flush input (without relying on serial.flushInput())
         n = self.serialconnection.inWaiting()
@@ -350,9 +387,21 @@ class Pyboard:
 
         if soft_reset:
             data = self.read_until(1, b"raw REPL; CTRL-B to exit\r\n>")
-            if not data.endswith(b"raw REPL; CTRL-B to exit\r\n>"):
-                print(data)
+            # Accept banner whether or not the prompt '>' arrived in the same buffer.
+            if b"raw REPL; CTRL-B to exit" not in data:
+                # DEBUG: show what we did get
+                print("[pyboard] enter_raw_repl: unexpected data:", repr(data[-200:]))
                 raise PyboardError("could not enter raw repl")
+
+            # Ensure we have the raw prompt
+            if not data.endswith(b">"):
+                self.read_until(1, b">", timeout=3)
+
+
+
+            #if not data.endswith(b"raw REPL; CTRL-B to exit\r\n>"):
+            #    print(data)
+            #    raise PyboardError("could not enter raw repl")
 
             self.serialconnection.write(b"\x04")  # ctrl-D: soft reset
 
@@ -364,10 +413,15 @@ class Pyboard:
                 print(data)
                 raise PyboardError("could not enter raw repl")
 
-        data = self.read_until(1, b"raw REPL; CTRL-B to exit\r\n")
-        if not data.endswith(b"raw REPL; CTRL-B to exit\r\n"):
-            print(data)
+        data = self.read_until(1, b"raw REPL; CTRL-B to exit\r\n>")
+        if b"raw REPL; CTRL-B to exit" not in data:
+            # DEBUG: show what we did get
+            print("[pyboard] enter_raw_repl: unexpected data:", repr(data[-200:]))
             raise PyboardError("could not enter raw repl")
+
+        # Ensure we have the raw prompt
+        if not data.endswith(b">"):
+            self.read_until(1, b">", timeout=3)
 
         self.in_raw_repl = True
 

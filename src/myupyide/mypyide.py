@@ -26,7 +26,7 @@ class MainApplication:
         self.root = tk.Tk()
         self.root.title('My uPy IDE')
         self.root.geometry('1280x800')
-        
+
         # PNG for Linux/macOS
         try:
             self.root.iconphoto(True, PhotoImage(file=png_icon))
@@ -39,9 +39,9 @@ class MainApplication:
                 self.root.iconbitmap(ico_icon)
             except Exception as e:
                 print("Failed to load ICO icon:", e)
-        
-        
-        
+
+
+
         # Initialize other modules
         #self.shared_serial = SerialPortManager()
         self.terminal = None #terminal.TerminalWindow()
@@ -68,7 +68,7 @@ class MainApplication:
             self.port_var.set(last_port)
             #self.terminal.connect_serial_port(last_port)
             self.serial.open(last_port)
-        
+
         autosync_setting = self.settings.get_setting('autosync', 0)
         self.autosync_var.set(autosync_setting)
         # Add trace for autosync checkbox
@@ -131,6 +131,14 @@ class MainApplication:
         self.run_button = ttk.Button(self.top_bar, text='RUN', command=self.on_run)
         self.run_button.pack(side='left')
 
+        # Quick run: send "import <module>" to the console (non-blocking)
+        self.run_import_button = ttk.Button(self.top_bar, text='RUN IMPORT', command=self.on_run_import)
+        self.run_import_button.pack(side='left')
+
+        # Breaky breaky
+        self.break_button = ttk.Button(self.top_bar, text="BREAK", command=lambda: self.terminal._send_data(b"\x03"))
+        self.break_button.pack (side="left")
+
         # Upload file button
         self.upload_file_button = ttk.Button(self.top_bar, text='Upload File', command=self.upload_file)
         self.upload_file_button.pack(side='left')
@@ -180,7 +188,7 @@ class MainApplication:
         self.editor = editor.SourceEditor(self.notebook_frame)
 
         self.remote_frame = ttk.Notebook(self.paned_window)
-        self.remote_frame.pack(fill='both', expand=True)  # Pack the notebook_frame        
+        self.remote_frame.pack(fill='both', expand=True)  # Pack the notebook_frame
 
         self.terminal_frame = ttk.Frame(self.remote_frame)
         #self.terminal_frame.pack(fill='both', expand=True)  # Pack the terminal_frame
@@ -216,17 +224,46 @@ class MainApplication:
         self.root.update_idletasks()
 
 
-    def update_ports(self, event):
-        self.port_options = [port.device for port in serial.tools.list_ports.comports()]
-        self.port_dropdown['values'] = self.port_options
+    def update_ports(self, event=None):
+        ports = serial.tools.list_ports.comports()
+        filtered = []
+
+        for p in ports:
+            dev = p.device
+
+            if sys.platform.startswith("linux"):
+                # Preferred: USB serial devices
+                if dev.startswith("/dev/ttyUSB") or dev.startswith("/dev/ttyACM"):
+                    filtered.append(dev)
+                    continue
+
+                # Also accept anything clearly USB-backed
+                desc = (p.description or "").lower()
+                hwid = (p.hwid or "").lower()
+                if "usb" in desc or "usb" in hwid or "vid:" in hwid:
+                    filtered.append(dev)
+                    continue
+
+                # Allow real hardware serial *only* if it doesn't look generic
+                if dev.startswith("/dev/ttyS"):
+                    if desc not in ("n/a", "") or "pci" in hwid:
+                        filtered.append(dev)
+
+            else:
+                # macOS / Windows: trust pyserial
+                filtered.append(dev)
+
+        self.port_options = sorted(set(filtered))
+        self.port_dropdown["values"] = self.port_options
+
 
     def on_port_selected(self, event):
         # Get the selected port name
         port_name = self.port_var.get()
-    
+
         # Disconnect the current port
         #self.terminal.disconnect_serial_port()
-    
+
         # Open the newly selected port
         #self.terminal.connect_serial_port(port_name)
 
@@ -273,6 +310,38 @@ class MainApplication:
             output = self.sync.sync_action('exec', text)
             self.terminal.text_widget.insert(tk.END, output)
             self.commander.viewer.insert(tk.END, output)
+
+    def on_run_import(self):
+        """Send `import <currentmodule>` to the device console.
+
+        This is intentionally simple and non-blocking: it just types the
+        command into the terminal serial line.
+        """
+        file_path = self.editor.get_current_file()
+        if not file_path:
+            self.statuscallback("No active file to import")
+            return
+
+        module = os.path.splitext(os.path.basename(file_path))[0]
+        if not module:
+            self.statuscallback("Couldn't derive module name from file")
+            return
+
+        # Best-effort: MicroPython REPL expects CRLF or CR. We'll use CRLF.
+        cmd = f"import {module}\r\n".encode("utf-8", errors="replace")
+
+        try:
+            # Use the terminal's serial manager (shared) so it behaves like typed input.
+            self.terminal.serial.send_data(cmd)
+        except Exception:
+            # Fallback: try sync serial manager if terminal isn't ready
+            try:
+                self.serial.send_data(cmd)
+            except Exception:
+                self.statuscallback("Failed to send import command to serial")
+                return
+
+
 
     def statuscallback (self, status):
         def update_status_text (text):
